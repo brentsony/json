@@ -46,6 +46,12 @@ class serializer
     using number_unsigned_t = typename BasicJsonType::number_unsigned_t;
     static constexpr uint8_t UTF8_ACCEPT = 0;
     static constexpr uint8_t UTF8_REJECT = 1;
+    
+    // ToDo: parameterize  -Brent
+    const int MAX_ARRAY_FORMAT_INDENT = 4;      // don't pretty-print 2nd-level arrays
+    const bool SHORTEN_LEADING_ZERO_DOT = true; // Remove leading "0." for readability
+    const int MAX_PRECISION = 5;                // maximum precision for floats
+    const bool ENSURE_DECIMAL_POINT = false;    // whether to append ".0" for integral floats (suppress by default)
 
   public:
     /*!
@@ -176,7 +182,7 @@ class serializer
                     return;
                 }
 
-                if (pretty_print)
+                if (current_indent < MAX_ARRAY_FORMAT_INDENT && pretty_print)
                 {
                     o->write_characters("[\n", 2);
 
@@ -598,8 +604,9 @@ class serializer
         static constexpr bool is_ieee_single_or_double
             = (std::numeric_limits<number_float_t>::is_iec559 and std::numeric_limits<number_float_t>::digits == 24 and std::numeric_limits<number_float_t>::max_exponent == 128) or
               (std::numeric_limits<number_float_t>::is_iec559 and std::numeric_limits<number_float_t>::digits == 53 and std::numeric_limits<number_float_t>::max_exponent == 1024);
-
-        dump_float(x, std::integral_constant<bool, is_ieee_single_or_double>());
+    
+        //dump_float(x, std::integral_constant<bool, is_ieee_single_or_double>());
+        dump_float(x, std::integral_constant<bool, false>());   // turn this off, so can control precision -Brent
     }
 
     void dump_float(number_float_t x, std::true_type /*is_ieee_single_or_double*/)
@@ -642,20 +649,34 @@ class serializer
                 *dec_pos = '.';
             }
         }
-
-        o->write_characters(number_buffer.data(), static_cast<std::size_t>(len));
-
-        // determine if need to append ".0"
-        const bool value_is_int_like =
-            std::none_of(number_buffer.begin(), number_buffer.begin() + len + 1,
-                         [](char c)
+    
+        int dotPos = int(len);
         {
-            return (c == '.' or c == 'e');
-        });
+            const auto decPtPtr = std::find(number_buffer.begin(), number_buffer.end(), decimal_point);
+            if (decPtPtr != number_buffer.end())
+                dotPos = int(decPtPtr - number_buffer.begin());
+        }
+        len = std::min(int(len), dotPos+1 + MAX_PRECISION);   // cut off extra trailing decimal places
+        
+        // Remove trailing zeros after decimal point
+        char* buf = number_buffer.begin();
+        while (len > dotPos && buf[len-1] == '0')
+            --len;
+        
+        int skipLeadingZero = (!SHORTEN_LEADING_ZERO_DOT) ? 0 : (dotPos == 1 && number_buffer[0] == '0');
+        o->write_characters(number_buffer.data() + skipLeadingZero, static_cast<std::size_t>(len - skipLeadingZero));
+        /*DEBUG*/ //std::string str(number_buffer.data()+skipLeadingZero, len-skipLeadingZero); printf("JSON: float=%s\n", str.c_str());
 
-        if (value_is_int_like)
-        {
-            o->write_characters(".0", 2);
+        if (ENSURE_DECIMAL_POINT) {     // if integral float values should end in ".0"
+            const bool value_is_int_like =
+                    std::none_of(number_buffer.begin(), number_buffer.begin() + len + 1,
+                                 [] (char c) {
+                                     return (c == '.' or c == 'e');
+                                 });
+    
+            if (value_is_int_like) {
+                o->write_characters(".0", 2);
+            }
         }
     }
 
