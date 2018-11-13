@@ -49,7 +49,6 @@ class serializer
     
     // ToDo: parameterize  -Brent
     const int MAX_ARRAY_FORMAT_INDENT = 4;      // don't pretty-print 2nd-level arrays
-    const bool SHORTEN_LEADING_ZERO_DOT = true; // Remove leading "0." for readability
     const int MAX_PRECISION = 5;                // maximum precision for floats
     const bool ENSURE_DECIMAL_POINT = false;    // whether to append ".0" for integral floats (suppress by default)
 
@@ -663,9 +662,8 @@ class serializer
         while (len > dotPos && buf[len-1] == '0')
             --len;
         
-        int skipLeadingZero = (!SHORTEN_LEADING_ZERO_DOT) ? 0 : (dotPos == 1 && number_buffer[0] == '0');
-        o->write_characters(number_buffer.data() + skipLeadingZero, static_cast<std::size_t>(len - skipLeadingZero));
-        /*DEBUG*/ //std::string str(number_buffer.data()+skipLeadingZero, len-skipLeadingZero); printf("JSON: float=%s\n", str.c_str());
+        o->write_characters(number_buffer.data(), static_cast<std::size_t>(len));
+        /*DEBUG*/ //std::string str(number_buffer.data(), len); printf("JSON: float=%s\n", str.c_str());
 
         if (ENSURE_DECIMAL_POINT) {     // if integral float values should end in ".0"
             const bool value_is_int_like =
